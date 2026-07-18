@@ -45,7 +45,6 @@
         <a href="#notices">নোটিশ</a>
         <a href="#blood">রক্তদাতা</a>
         <a href="#request">রক্তের আবেদন</a>
-        <a href="#receipt">দান রসিদ</a>
         <a href="#constitution">গঠনতন্ত্র</a>
         <a href="#contact">যোগাযোগ</a>
         <button class="btn btn-primary nav-login-btn" id="loginBtn" type="button">লগইন</button>
@@ -441,100 +440,7 @@
       </div>
     </section>
 
-    <section class="section soft-section" id="receipt">
-      <div class="container">
-        <div class="section-heading center-heading">
-          <span class="eyebrow">দান রসিদ</span>
-          <h2>অনুদানের রসিদ তৈরি করুন</h2>
-          <p>দাতার নাম, পরিমাণ ও খাত লিখুন—রসিদ নম্বর ও তারিখ স্বয়ংক্রিয়ভাবে যুক্ত হবে। রসিদটি PDF, প্রিন্ট বা ছবি হিসেবে সংরক্ষণ করা যাবে।</p>
-        </div>
 
-        <div class="receipt-layout">
-          <form class="form-card receipt-form" id="receiptForm" novalidate>
-            <div class="form-grid single">
-              <label class="field">
-                <span>দাতার নাম *</span>
-                <input type="text" name="donorName" autocomplete="off">
-                <small class="field-error" hidden></small>
-              </label>
-              <label class="field">
-                <span>পরিমাণ (টাকা) *</span>
-                <input type="number" name="amount" min="1" step="any" placeholder="যেমন: ৫০০">
-                <small class="field-error" hidden></small>
-              </label>
-              <label class="field">
-                <span>খাত / তহবিল *</span>
-                <select name="cause">
-                  <option value="">নির্বাচন করুন</option>
-                  <option>সাধারণ তহবিল</option>
-                  <option>রক্তদান কর্মসূচি</option>
-                  <option>শীতবস্ত্র বিতরণ</option>
-                  <option>ইফতার ও ঈদ উপহার</option>
-                  <option>শিক্ষা সামগ্রী প্রদান</option>
-                  <option>চিকিৎসা সহায়তা</option>
-                  <option>টিউবওয়েল স্থাপন</option>
-                  <option>বৃক্ষরোপণ প্রকল্প</option>
-                  <option>ঘর নির্মাণ প্রকল্প</option>
-                </select>
-                <small class="field-error" hidden></small>
-              </label>
-              <label class="field">
-                <span>অনুমোদনকারীর নাম (ঐচ্ছিক)</span>
-                <input type="text" name="signatory" placeholder="স্বাক্ষরের ওপরে নাম দেখাতে চাইলে লিখুন">
-                <small class="field-error" hidden></small>
-              </label>
-              <label class="field checkbox-field">
-                <span class="checkbox-row">
-                  <input type="checkbox" name="withQr" checked>
-                  রসিদে QR কোড যুক্ত করুন
-                </span>
-                <small class="field-error" hidden></small>
-              </label>
-            </div>
-            <div class="form-footer receipt-actions">
-              <button class="btn btn-primary" type="submit" data-action="pdf">PDF ডাউনলোড</button>
-              <button class="btn btn-secondary" type="submit" data-action="print">প্রিন্ট করুন</button>
-              <button class="btn btn-secondary" type="submit" data-action="image">ছবি হিসেবে সংরক্ষণ</button>
-              <p class="form-success" id="receiptStatus" hidden></p>
-            </div>
-          </form>
-
-          <div class="receipt-preview-wrap">
-            <div class="receipt-paper" id="receiptPaper" aria-label="রসিদের প্রিভিউ">
-              <div class="receipt-head">
-                <img class="receipt-logo" src="assets/images/prottoy-logo.png" alt="প্রত্যয় লোগো">
-                <div>
-                  <strong>প্রত্যয়</strong>
-                  <span>সংকল্প পাশে থাকার</span>
-                  <small>নাঙ্গলকোট, কুমিল্লা, বাংলাদেশ</small>
-                </div>
-                <span class="receipt-tag">অনুদান রসিদ</span>
-              </div>
-              <div class="receipt-meta">
-                <p>রসিদ নং: <strong id="rcNumber">—</strong></p>
-                <p>তারিখ: <strong id="rcDate">—</strong></p>
-              </div>
-              <div class="receipt-body">
-                <div class="receipt-row"><span>দাতার নাম</span><strong id="rcName">—</strong></div>
-                <div class="receipt-row"><span>খাত / তহবিল</span><strong id="rcCause">—</strong></div>
-                <div class="receipt-amount">
-                  <span>প্রদত্ত পরিমাণ</span>
-                  <strong id="rcAmount">৳ ০</strong>
-                </div>
-              </div>
-              <div class="receipt-foot">
-                <div class="receipt-sign">
-                  <span class="sign-line"></span>
-                  <small id="rcSignatory">অনুমোদিত স্বাক্ষর</small>
-                </div>
-                <div class="receipt-qr" id="rcQr" aria-hidden="true"></div>
-              </div>
-              <p class="receipt-note">আপনার অনুদানের জন্য প্রত্যয়ের পক্ষ থেকে আন্তরিক ধন্যবাদ। এই রসিদটি কম্পিউটারে তৈরি।</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <section class="section" id="constitution">
       <div class="container constitution-card">
@@ -637,7 +543,6 @@
         <a href="#notices">নোটিশ বোর্ড</a>
         <a href="#blood">রক্তদাতা তালিকা</a>
         <a href="#request">রক্তের আবেদন</a>
-        <a href="#receipt">দান রসিদ</a>
         <a href="assets/docs/prottoy-constitution-2nd-edition.pdf" target="_blank" rel="noopener">গঠনতন্ত্র</a>
       </div>
       <div>

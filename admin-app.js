@@ -30,33 +30,53 @@ const donorTableBody = document.getElementById("donorTableBody");
 const logoutBtn = document.getElementById("logoutBtn");
 
 // 🔐 Login Logic
+function showLoginError(msg) {
+  if (loginError) {
+    loginError.innerHTML = msg;
+    loginError.style.display = "block";
+  }
+}
+
 if (loginForm) {
-  loginForm.addEventListener("submit", (e) => {
+  loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (loginError) loginError.style.display = "none";
 
+    const loginBtn = document.getElementById("loginBtn");
     const email = document.getElementById("loginEmail")?.value.trim() || "";
-    const password = document.getElementById("loginPassword")?.value.trim() || "";
+    const password = document.getElementById("loginPassword")?.value || "";
 
     if (!email || !password) {
-      if (loginError) {
-        loginError.textContent = "ইমেইল এবং পাসওয়ার্ড উভয়ই প্রয়োজন";
-        loginError.style.display = "block";
-      }
+      showLoginError("ইমেইল এবং পাসওয়ার্ড উভয়ই দিন।");
       return;
     }
 
-    signInWithEmailAndPassword(auth, email, password)
-      .then((userCredential) => {
-        console.log("Successfully logged in:", userCredential.user.email);
-      })
-      .catch((error) => {
-        console.error("Login error:", error);
-        if (loginError) {
-          loginError.textContent = "ভুল ইমেইল অথবা পাসওয়ার্ড!";
-          loginError.style.display = "block";
-        }
-      });
+    // Loading state
+    if (loginBtn) { loginBtn.textContent = "লন্ডিং..."; loginBtn.disabled = true; }
+
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log("✔ সফলভাবে লগইন হয়েছে:", userCredential.user.email);
+    } catch (error) {
+      console.error("লগইন এরর:", error.code, error.message);
+
+      // বিস্তারিত বাংলা error message
+      const errorMessages = {
+        "auth/invalid-credential":    "ভুল ইমেইল অথবা পাসওয়ার্ড। আবার চেষ্টা করুন।",
+        "auth/user-not-found":         "এই ইমেইল দিয়ে কোনো অ্যাডমিন অ্যাকাউন্ট নেই।",
+        "auth/wrong-password":         "পাসওয়ার্ড ভুল। আবার চেষ্টা করুন।",
+        "auth/invalid-email":          "ইমেইল ফরম্যাট সঠিক নয়।",
+        "auth/too-many-requests":      "অনেকবার ভুল পাসওয়ার্ড দেওয়ায় অ্যাকাউন্ট সাময়িকভাবে ব্লক হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।",
+        "auth/network-request-failed": "ইন্টারনেট সংযোগ নেই। ইন্টারনেট চেক করে আবার চেষ্টা করুন।",
+        "auth/user-disabled":          "এই অ্যাকাউন্ট ব্লক করা হয়েছে।",
+      };
+
+      const msg = errorMessages[error.code]
+        || `লগইন ব্যর্থ: ${error.code}`;
+      showLoginError(msg);
+    } finally {
+      if (loginBtn) { loginBtn.textContent = "Login"; loginBtn.disabled = false; }
+    }
   });
 }
 
@@ -513,6 +533,21 @@ window.deleteContactMessage = async (id) => {
 
 // ===== DONATION RECEIPTS MANAGEMENT =====
 
+// প্রতিটি রশিদের নির্দিষ্ট সিরিয়াল নম্বর বের করা
+async function getNextReceiptNumber() {
+  try {
+    const querySnapshot = await getDocs(collection(db, "receipts"));
+    let maxNo = 0;
+    querySnapshot.forEach((docSnap) => {
+      const no = Number(docSnap.data().receiptNo) || 0;
+      if (no > maxNo) maxNo = no;
+    });
+    return maxNo + 1;
+  } catch {
+    return 1;
+  }
+}
+
 // Load Donation Receipts from Firestore
 async function loadReceipts() {
   const receiptsTableBody = document.getElementById("receiptsTableBody");
@@ -521,6 +556,8 @@ async function loadReceipts() {
 
   if (!receiptsTableBody) return;
 
+  receiptsTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">ডাটা লোড হচ্ছে...</td></tr>';
+
   try {
     const querySnapshot = await getDocs(collection(db, "receipts"));
     const receipts = [];
@@ -528,13 +565,13 @@ async function loadReceipts() {
       receipts.push({ id: docSnap.id, ...docSnap.data() });
     });
 
-    // নতুন রসিদ আগে দেখাবে
-    receipts.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    // রশিদ নম্বর অনুযায়ী নতুন থেকে পুরনোর দিকে সাজানো
+    receipts.sort((a, b) => (Number(b.receiptNo) || 0) - (Number(a.receiptNo) || 0));
 
     receiptsTableBody.innerHTML = '';
 
     if (!receipts.length) {
-      receiptsTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">কোনো দান রসিদ নেই।</td></tr>';
+      receiptsTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">কোনো অনুদান রশিদ নেই। শুরু করতে “নতুন রশিদ তৈরি” বাটনে ক্লিক করুন।</td></tr>';
       if (receiptCount) receiptCount.textContent = '0';
       if (totalDonationText) totalDonationText.textContent = '';
       return;
@@ -546,45 +583,146 @@ async function loadReceipts() {
 
     receipts.forEach((data) => {
       totalAmount += Number(data.amount) || 0;
-      const receiptDate = data.createdAt
-        ? new Date(data.createdAt).toLocaleString('bn-BD', { dateStyle: 'medium', timeStyle: 'short' })
-        : 'অজানা';
+      const receiptDate = data.donationDate
+        ? new Date(`${data.donationDate}T00:00:00`).toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' })
+        : (data.createdAt ? new Date(data.createdAt).toLocaleDateString('bn-BD', { dateStyle: 'medium' }) : 'অজানা');
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td><strong>${escapeHtml(data.receiptNo || '—')}</strong></td>
-        <td>${escapeHtml(data.donorName)}</td>
-        <td style="font-weight:600; color: var(--primary);">${new Intl.NumberFormat('bn-BD').format(Number(data.amount) || 0)}</td>
+        <td><strong style="color:var(--primary); font-size:15px;">#${escapeHtml(String(data.receiptNo || '—'))}</strong></td>
+        <td>
+          <strong>${escapeHtml(data.donorName)}</strong>
+          ${data.address ? `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(data.address)}</div>` : ''}
+        </td>
+        <td>${escapeHtml(data.phone || '—')}</td>
+        <td style="font-weight:700; color: var(--primary); font-size:15px;">৳ ${new Intl.NumberFormat('bn-BD').format(Number(data.amount) || 0)}</td>
+        <td><span class="status-badge status-active" style="background:#e8f4fd; color:#0a6bbd;">${escapeHtml(data.paymentMethod || '—')}</span></td>
         <td>${escapeHtml(data.cause || '—')}</td>
         <td>${receiptDate}</td>
         <td class="action-btns">
-          <button class="btn-del" onclick="window.deleteReceipt('${data.id}')"><i class="fa-solid fa-trash"></i></button>
+          <button onclick="window.viewReceipt('${data.id}')" style="background:#17a2b8; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer; font-size:12px; margin-right:4px;" title="বিস্তারিত">বিস্তার</button>
+          <button class="btn-del" onclick="window.deleteReceipt('${data.id}')" title="মুছুন"><i class="fa-solid fa-trash"></i></button>
         </td>
       `;
       receiptsTableBody.appendChild(tr);
     });
 
     if (totalDonationText) {
-      totalDonationText.textContent = `মোট অনুদান: ৳ ${new Intl.NumberFormat('bn-BD').format(totalAmount)}`;
+      totalDonationText.textContent = `মোট অনুদান: ৳ ${new Intl.NumberFormat('bn-BD').format(totalAmount)} | মোট রশিদ: ${receipts.length}টি`;
     }
   } catch (error) {
     console.error("Error loading receipts:", error);
-    receiptsTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:red; padding:20px;">ডাটা লোড করতে ব্যর্থ হয়েছে।</td></tr>';
+    receiptsTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:red; padding:20px;">ডাটা লোড করতে ব্যর্থ হয়েছে।</td></tr>';
   }
 }
 
+
 // Delete Receipt
 window.deleteReceipt = async (id) => {
-  if (!confirm("এই রসিদের রেকর্ডটি মুছে ফেলতে নিশ্চিত?")) return;
+  if (!confirm("এই রশিদের রেকর্ডটি মুছে ফেলতে নিশ্চিত?")) return;
 
   try {
     await deleteDoc(doc(db, "receipts", id));
+    alert("✔ রশিদ মুছে ফেলা হয়েছে।");
     loadReceipts();
   } catch (error) {
     console.error("Delete receipt error:", error);
     alert("মুছতে ব্যর্থ হয়েছে।");
   }
 };
+
+// View Receipt Details
+window.viewReceipt = (id) => {
+  // Future: open a print-preview modal
+  alert("রশিদ দেখার সুবিধা শীঘ্রই যোগ হবে।");
+};
+
+// ===== RECEIPT MODAL LOGIC =====
+const receiptModal = document.getElementById("addReceiptModal");
+const addReceiptForm = document.getElementById("addReceiptForm");
+const saveReceiptBtn = document.getElementById("saveReceiptBtn");
+
+// Modal খোলার সময় অটো নম্বর সেট
+if (document.getElementById("openReceiptModalBtn")) {
+  document.getElementById("openReceiptModalBtn").addEventListener("click", async () => {
+    if (receiptModal) {
+      // আজকের তারিখ ডিফল্ট
+      const dateInput = document.getElementById("receiptDate");
+      if (dateInput && !dateInput.value) {
+        const now = new Date();
+        dateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      }
+      // পরবর্তী রশিদ নম্বর দেখানো
+      const nextNo = await getNextReceiptNumber();
+      const display = document.getElementById("receiptNoDisplay");
+      if (display) display.value = `PRT-${String(nextNo).padStart(4, '0')}`;
+      receiptModal.style.display = "flex";
+    }
+  });
+}
+
+if (document.getElementById("closeReceiptModalBtn")) {
+  document.getElementById("closeReceiptModalBtn").addEventListener("click", () => {
+    if (receiptModal) receiptModal.style.display = "none";
+    if (addReceiptForm) addReceiptForm.reset();
+  });
+}
+
+if (addReceiptForm) {
+  addReceiptForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    if (saveReceiptBtn) {
+      saveReceiptBtn.textContent = "সংরক্ষণ হচ্ছে...";
+      saveReceiptBtn.disabled = true;
+    }
+
+    try {
+      // চূড়ান্ত নম্বর নির্ধারণ (ডুপ্লিকেট এড়াতে)
+      const nextNo = await getNextReceiptNumber();
+      const receiptNoStr = `PRT-${String(nextNo).padStart(4, '0')}`;
+
+      const newReceipt = {
+        receiptNo: nextNo,
+        receiptNoDisplay: receiptNoStr,
+        donorName: document.getElementById("receiptDonorName")?.value.trim() || "",
+        phone: document.getElementById("receiptPhone")?.value.trim() || "",
+        email: document.getElementById("receiptEmail")?.value.trim() || "",
+        address: document.getElementById("receiptAddress")?.value.trim() || "",
+        amount: Number(document.getElementById("receiptAmount")?.value) || 0,
+        paymentMethod: document.getElementById("receiptPaymentMethod")?.value || "",
+        transactionId: document.getElementById("receiptTransactionId")?.value.trim() || "",
+        donationDate: document.getElementById("receiptDate")?.value || "",
+        cause: document.getElementById("receiptCause")?.value || "",
+        note: document.getElementById("receiptNote")?.value.trim() || "",
+        createdAt: new Date().toISOString(),
+        addedVia: "Admin Panel"
+      };
+
+      // Validate
+      if (!newReceipt.donorName || !newReceipt.phone || !newReceipt.amount || !newReceipt.paymentMethod || !newReceipt.cause || !newReceipt.donationDate) {
+        alert("স্টার (*) চিহ্নিত সব ফিল্ড পূরণ করুন");
+        return;
+      }
+
+      await addDoc(collection(db, "receipts"), newReceipt);
+
+      if (receiptModal) receiptModal.style.display = "none";
+      addReceiptForm.reset();
+      loadReceipts();
+      alert(`✔ রশিদ ${receiptNoStr} সফলভাবে সংরক্ষিত হয়েছে!`);
+    } catch (error) {
+      console.error("Add receipt error:", error);
+      alert("রশিদ যোগ করা যায়নি।");
+    } finally {
+      if (saveReceiptBtn) {
+        saveReceiptBtn.innerHTML = '<i class="fa-solid fa-save"></i> রশিদ সংরক্ষণ করুন';
+        saveReceiptBtn.disabled = false;
+      }
+    }
+  });
+}
+
 
 // ===== NOTICES MANAGEMENT =====
 
@@ -765,6 +903,7 @@ const TAB_LOADERS = {
   requestsSection: loadBloodRequests,
   messagesSection: loadContactMessages,
   receiptsSection: loadReceipts,
+  receiptGeneratorSection: null,
   noticesSection: loadNotices
 };
 
@@ -786,5 +925,159 @@ tabButtons.forEach((btn) => {
     if (TAB_LOADERS[targetId]) TAB_LOADERS[targetId]();
   });
 });
+
+// ===== VISUAL RECEIPT GENERATOR =====
+
+const CDN = {
+  html2canvas: "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+  jspdf: "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+  qrcode: "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+};
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function updateReceiptPreview(form) {
+  const nextNo = await getNextReceiptNumber();
+  const receiptNo = `PRT-${String(nextNo).padStart(4, "0")}`;
+  const today = new Date();
+  
+  const name = form.elements.donorName.value.trim();
+  const amount = Number(form.elements.amount.value);
+  const cause = form.elements.cause.value;
+  const signatory = form.elements.signatory.value.trim();
+  const withQr = form.elements.withQr.checked;
+
+  document.getElementById("rcNumber").textContent = receiptNo;
+  document.getElementById("rcDate").textContent = new Intl.DateTimeFormat("bn-BD", { day: "numeric", month: "long", year: "numeric" }).format(today);
+  document.getElementById("rcName").textContent = name;
+  document.getElementById("rcCause").textContent = cause;
+  document.getElementById("rcAmount").textContent = `৳ ${new Intl.NumberFormat('bn-BD').format(amount)}`;
+  document.getElementById("rcSignatory").textContent = signatory ? `${signatory} — অনুমোদিত স্বাক্ষর` : "অনুমোদিত স্বাক্ষর";
+
+  const qrBox = document.getElementById("rcQr");
+  qrBox.innerHTML = "";
+  if (withQr) {
+    try {
+      await loadScript(CDN.qrcode);
+      new QRCode(qrBox, {
+        text: `Prottoy Donation Receipt\nNo: ${receiptNo}\nName: ${name}\nAmount: ${amount} BDT\nCause: ${cause}\nDate: ${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`,
+        width: 74,
+        height: 74,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch {
+      console.warn("QR code generation failed");
+    }
+  }
+  return { nextNo, receiptNoStr: receiptNo };
+}
+
+async function receiptToCanvas() {
+  await loadScript(CDN.html2canvas);
+  return html2canvas(document.getElementById("receiptPaper"), { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+}
+
+function setupVisualReceiptGenerator() {
+  const form = document.getElementById("receiptForm");
+  const statusEl = document.getElementById("receiptStatus");
+  if (!form) return;
+
+  let action = "pdf";
+  form.querySelectorAll("button[data-action]").forEach(button => {
+    button.addEventListener("click", () => { action = button.dataset.action; });
+  });
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    
+    if (!form.elements.donorName.value.trim() || !form.elements.amount.value || !form.elements.cause.value || !form.elements.paymentMethod.value) {
+      alert("স্টার (*) চিহ্নিত সব ফিল্ড পূরণ করুন");
+      return;
+    }
+
+    try {
+      statusEl.textContent = "রসিদ তৈরি হচ্ছে…";
+      statusEl.hidden = false;
+      
+      const { nextNo, receiptNoStr } = await updateReceiptPreview(form);
+
+      // Save to Firebase
+      try {
+        const newReceipt = {
+          receiptNo: nextNo,
+          receiptNoDisplay: receiptNoStr,
+          donorName: form.elements.donorName.value.trim(),
+          amount: Number(form.elements.amount.value),
+          paymentMethod: form.elements.paymentMethod.value,
+          cause: form.elements.cause.value,
+          signatory: form.elements.signatory.value.trim(),
+          donationDate: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          addedVia: "Visual Generator"
+        };
+        await addDoc(collection(db, "receipts"), newReceipt);
+        loadReceipts();
+      } catch (err) {
+        console.error("Firebase save failed:", err);
+      }
+
+      // Generate output based on action
+      if (action === "print") {
+        statusEl.textContent = "✔ প্রিন্ট ডায়ালগ খোলা হয়েছে।";
+        window.print();
+        setTimeout(() => { 
+          form.reset(); 
+          // Switch to receipts tab
+          const receiptTabBtn = document.querySelector('.tab-btn[data-tab="receiptsSection"]');
+          if (receiptTabBtn) receiptTabBtn.click();
+        }, 1000);
+        return;
+      }
+
+      const canvas = await receiptToCanvas();
+
+      if (action === "image") {
+        const link = document.createElement("a");
+        link.download = `${receiptNoStr}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        statusEl.textContent = "✔ রসিদ ছবি হিসেবে ডাউনলোড হয়েছে।";
+      } else {
+        await loadScript(CDN.jspdf);
+        const pdf = new window.jspdf.jsPDF({ orientation: "portrait", unit: "mm", format: "a5" });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const margin = 10;
+        const imgWidth = pageWidth - margin * 2;
+        const imgHeight = (canvas.height / canvas.width) * imgWidth;
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgWidth, imgHeight);
+        pdf.save(`${receiptNoStr}.pdf`);
+        statusEl.textContent = "✔ রসিদ PDF হিসেবে ডাউনলোড হয়েছে।";
+      }
+      
+      setTimeout(() => { 
+        form.reset(); 
+        statusEl.hidden = true; 
+        // Switch to receipts tab
+        const receiptTabBtn = document.querySelector('.tab-btn[data-tab="receiptsSection"]');
+        if (receiptTabBtn) receiptTabBtn.click();
+      }, 3000);
+
+    } catch (error) {
+      statusEl.textContent = "⚠ রসিদ তৈরি করা যায়নি।";
+      console.warn("Receipt generation failed:", error);
+    }
+  });
+}
+
+setupVisualReceiptGenerator();
 
 console.log("Admin app loaded");
