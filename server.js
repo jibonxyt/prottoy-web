@@ -102,34 +102,37 @@ app.post('/api/send-blood-request-email', async (req, res) => {
   }
 });
 
-// Donor Registration Email
-app.post('/api/send-donor-registration-email', async (req, res) => {
+// Donor Approval Email
+app.post('/api/send-donor-approval-email', async (req, res) => {
   try {
-    const { name, bloodGroup, phone, district, upazila, area } = req.body;
+    const { name, phone, email } = req.body;
 
-    if (!name || !bloodGroup || !phone || !district || !upazila || !area) {
-      return res.status(400).json({ error: 'সব ফিল্ড পূরণ করুন' });
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'নাম এবং ফোন প্রয়োজন' });
     }
+
+    const userEmail = email && email !== 'না দেওয়া হয়েছে' ? email : process.env.ADMIN_EMAIL;
 
     const mailOptions = {
       from: process.env.GMAIL_USER,
-      to: process.env.ADMIN_EMAIL || 'prottoy.nk@gmail.com',
-      subject: `নতুন রক্তদাতা নিবন্ধন - ${name} (${bloodGroup})`,
+      to: userEmail,
+      subject: 'আপনার নিবন্ধন অনুমোদিত - প্রত্যয়',
       html: `
-        <h2>🩸 নতুন রক্তদাতা নিবন্ধন</h2>
-        <p><strong>নাম:</strong> ${escapeHtml(name)}</p>
-        <p><strong>রক্তের গ্রুপ:</strong> ${escapeHtml(bloodGroup)}</p>
-        <p><strong>মোবাইল:</strong> ${escapeHtml(phone)}</p>
-        <p><strong>জেলা:</strong> ${escapeHtml(district)}</p>
-        <p><strong>উপজেলা:</strong> ${escapeHtml(upazila)}</p>
-        <p><strong>এলাকা:</strong> ${escapeHtml(area)}</p>
+        <h2>✔ স্বাগতম, ${escapeHtml(name)}!</h2>
+        <p>আপনার রক্তদাতা নিবন্ধন সফলভাবে অনুমোদিত হয়েছে।</p>
+        <p><strong>আপনার তথ্য:</strong></p>
+        <ul>
+          <li><strong>নাম:</strong> ${escapeHtml(name)}</li>
+          <li><strong>ফোন:</strong> ${escapeHtml(phone)}</li>
+        </ul>
+        <p>আপনার তথ্য এখন জাতীয় রক্তদাতা তালিকায় প্রকাশিত হয়েছে। প্রত্যয় সংগঠন আপনাকে মানবসেবার এই উদ্যোগে অংশগ্রহণের জন্য ধন্যবাদ জানায়।</p>
         <hr>
-        <p><em>এই রক্তদাতাকে সংরক্ষিত তালিকায় যুক্ত করুন এবং যাচাই করুন।</em></p>
+        <p>যদি কোনো প্রশ্ন থাকে, আমাদের সাথে যোগাযোগ করুন।</p>
       `
     };
 
     await transporter.sendMail(mailOptions);
-    res.json({ success: true, message: '✔ নিবন্ধন সফল' });
+    res.json({ success: true, message: '✔ অনুমোদন ইমেইল পাঠানো হয়েছে' });
   } catch (error) {
     console.error('Email Error:', error);
     res.status(500).json({ error: 'ইমেইল পাঠাতে ব্যর্থ হয়েছে' });

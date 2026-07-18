@@ -59,8 +59,16 @@
     .btn-toggle { background: #ffc107; color: #000; }
     .btn-del { background: var(--danger); color: white; }
     
+    /* Tabs */
+    .tab-bar { display: flex; gap: 18px; margin-bottom: 20px; border-bottom: 2px solid var(--border); flex-wrap: wrap; }
+    .tab-btn { background: none; border: none; padding: 10px 0; font-size: 15px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; font-family: inherit; }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .count-badge { background: var(--danger); color: white; border-radius: 50%; padding: 2px 6px; font-size: 12px; margin-left: 4px; }
+    .message-cell { max-width: 280px; white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+    textarea.notice-textarea { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; font-family: inherit; resize: vertical; }
+
     /* Modal */
-    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; overflow-y: auto; padding: 20px; }
     .modal-content { background: var(--surface); padding: 30px; border-radius: 12px; width: 100%; max-width: 500px; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     .close-btn { background: none; border: none; font-size: 24px; cursor: pointer; }
@@ -101,25 +109,158 @@
     </header>
     
     <div class="container">
-      <div class="action-bar">
-        <h2>Donor Management</h2>
-        <button class="btn" id="openAddModalBtn" style="width: auto;"><i class="fa-solid fa-plus"></i> Add New Donor</button>
+      <!-- Tabs -->
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="approvedSection">অনুমোদিত রক্তদাতা</button>
+        <button class="tab-btn" data-tab="pendingSection">নতুন আবেদন <span id="pendingCount" class="count-badge">0</span></button>
+        <button class="tab-btn" data-tab="requestsSection">রক্তের আবেদন <span id="requestCount" class="count-badge">0</span></button>
+        <button class="tab-btn" data-tab="messagesSection">যোগাযোগ বার্তা <span id="messageCount" class="count-badge">0</span></button>
+        <button class="tab-btn" data-tab="receiptsSection">দান রসিদ <span id="receiptCount" class="count-badge">0</span></button>
+        <button class="tab-btn" data-tab="noticesSection">নোটিশ</button>
       </div>
       
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Phone</th>
-              <th>Blood Group</th>
-              <th>Location</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="donorTableBody"></tbody>
-        </table>
+      <!-- Approved Donors Section -->
+      <div id="approvedSection">
+        <div class="action-bar">
+          <h2>অনুমোদিত রক্তদাতা</h2>
+          <button class="btn" id="openAddModalBtn" style="width: auto;"><i class="fa-solid fa-plus"></i> নতুন যোগ করুন</button>
+        </div>
+        
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>নাম</th>
+                <th>ফোন</th>
+                <th>রক্তের গ্রুপ</th>
+                <th>অবস্থান</th>
+                <th>স্থিতি</th>
+                <th>পদক্ষেপ</th>
+              </tr>
+            </thead>
+            <tbody id="donorTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      
+      <!-- Pending Registrations Section -->
+      <div id="pendingSection" style="display: none;">
+        <div class="action-bar">
+          <h2>নতুন নিবন্ধন আবেদন</h2>
+          <span id="noPendingMsg" style="color: var(--text-muted); font-size: 16px;">কোনো নতুন আবেদন নেই</span>
+        </div>
+        
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>নাম</th>
+                <th>ফোন</th>
+                <th>রক্তের গ্রুপ</th>
+                <th>অবস্থান</th>
+                <th>আবেদনের তারিখ</th>
+                <th>পদক্ষেপ</th>
+              </tr>
+            </thead>
+            <tbody id="pendingTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      
+      <!-- Blood Requests Section -->
+      <div id="requestsSection" style="display: none;">
+        <div class="action-bar">
+          <h2>রক্তের আবেদন</h2>
+          <span id="noRequestsMsg" style="color: var(--text-muted); font-size: 16px;">কোনো রক্তের আবেদন নেই</span>
+        </div>
+        
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>রোগীর নাম</th>
+                <th>রক্তের গ্রুপ</th>
+                <th>ব্যাগ</th>
+                <th>হাসপাতাল</th>
+                <th>প্রয়োজনীয় তারিখ</th>
+                <th>যোগাযোগ</th>
+                <th>পদক্ষেপ</th>
+              </tr>
+            </thead>
+            <tbody id="requestsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Contact Messages Section -->
+      <div id="messagesSection" style="display: none;">
+        <div class="action-bar">
+          <h2>যোগাযোগ বার্তা</h2>
+          <span id="noMessagesMsg" style="color: var(--text-muted); font-size: 16px;">কোনো বার্তা নেই</span>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>নাম</th>
+                <th>ইমেইল</th>
+                <th>বিষয়</th>
+                <th>বার্তা</th>
+                <th>তারিখ</th>
+                <th>পদক্ষেপ</th>
+              </tr>
+            </thead>
+            <tbody id="messagesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Donation Receipts Section -->
+      <div id="receiptsSection" style="display: none;">
+        <div class="action-bar">
+          <h2>দান রসিদ</h2>
+          <span id="totalDonationText" style="color: var(--primary); font-size: 16px; font-weight: 600;"></span>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>রসিদ নং</th>
+                <th>দাতার নাম</th>
+                <th>পরিমাণ (৳)</th>
+                <th>খাত / তহবিল</th>
+                <th>তারিখ</th>
+                <th>পদক্ষেপ</th>
+              </tr>
+            </thead>
+            <tbody id="receiptsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Notices Section -->
+      <div id="noticesSection" style="display: none;">
+        <div class="action-bar">
+          <h2>নোটিশ ব্যবস্থাপনা</h2>
+          <button class="btn" id="openNoticeModalBtn" style="width: auto;"><i class="fa-solid fa-plus"></i> নতুন নোটিশ</button>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>শিরোনাম</th>
+                <th>ক্যাটাগরি</th>
+                <th>তারিখ</th>
+                <th>গুরুত্বপূর্ণ</th>
+                <th>পদক্ষেপ</th>
+              </tr>
+            </thead>
+            <tbody id="noticesTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -150,11 +291,52 @@
             <input type="text" id="donorDistrict" required>
           </div>
           <div class="input-group">
-            <label>Upazila/Area</label>
+            <label>Upazila</label>
+            <input type="text" id="donorUpazila" required>
+          </div>
+          <div class="input-group full-width">
+            <label>Area / Village</label>
             <input type="text" id="donorArea" required>
           </div>
         </div>
         <button type="submit" class="btn" style="margin-top: 20px;" id="saveDonorBtn">Save Donor</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Notice Modal -->
+  <div id="addNoticeModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>নতুন নোটিশ যোগ করুন</h2>
+        <button class="close-btn" id="closeNoticeModalBtn">&times;</button>
+      </div>
+      <form id="addNoticeForm">
+        <div class="form-grid">
+          <div class="input-group full-width">
+            <label>শিরোনাম *</label>
+            <input type="text" id="noticeTitle" required>
+          </div>
+          <div class="input-group">
+            <label>ক্যাটাগরি *</label>
+            <input type="text" id="noticeCategory" placeholder="যেমন: রক্তদান" required>
+          </div>
+          <div class="input-group">
+            <label>তারিখ *</label>
+            <input type="date" id="noticeDate" required>
+          </div>
+          <div class="input-group full-width">
+            <label>বিবরণ *</label>
+            <textarea id="noticeDescription" class="notice-textarea" rows="4" required></textarea>
+          </div>
+          <div class="input-group full-width">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;">
+              <input type="checkbox" id="noticeImportant" style="width: auto;">
+              গুরুত্বপূর্ণ নোটিশ হিসেবে চিহ্নিত করুন
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="btn" style="margin-top: 20px;" id="saveNoticeBtn">নোটিশ প্রকাশ করুন</button>
       </form>
     </div>
   </div>

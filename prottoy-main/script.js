@@ -21,7 +21,9 @@
 
 let DONORS = []; // Live Data from Firebase
 
-const NOTICES = [
+/* ডিফল্ট নোটিশ — Firebase-এ সংযোগ না হলে ফলব্যাক হিসেবে দেখানো হয়।
+   নোটিশ এখন এডমিন প্যানেল (admin.html) থেকে ম্যানেজ করা হয়। */
+let NOTICES = [
   {
     id: 1,
     category: "রক্তদান",
@@ -105,7 +107,16 @@ function loadScript(src) {
    ================================================================ */
 
 function renderNotices() {
-  const sorted = [...NOTICES].sort((a, b) => b.date.localeCompare(a.date));
+  const sorted = [...NOTICES].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+  if (!sorted.length) {
+    $("noticeGrid").innerHTML = `
+      <p style="grid-column:1/-1; text-align:center; color:var(--muted, #666); padding:30px 10px;">
+        এই মুহূর্তে কোনো নোটিশ নেই।
+      </p>`;
+    $("noticeCount").textContent = bnNumber(0);
+    return;
+  }
 
   $("noticeGrid").innerHTML = sorted.map(notice => `
     <article class="notice-card reveal ${notice.important ? "important" : ""}">
@@ -126,14 +137,10 @@ function renderNotices() {
    04. রক্তদাতা তালিকা ও ফিল্টার
    ================================================================ */
 
-/* নিবন্ধন ফর্ম থেকে যুক্ত রক্তদাতারা localStorage-এ থাকে */
+/* নিবন্ধন ফর্ম থেকে যুক্ত রক্তদাতারা এখন শুধুমাত্র অনুমোদিত দাতারা দেখা যায় */
 function getRegisteredDonors() {
-  try {
-    const stored = JSON.parse(localStorage.getItem("prottoy-donors")) ?? [];
-    return Array.isArray(stored) ? stored : [];
-  } catch {
-    return [];
-  }
+  // এখন localStorage থেকে নয়, সরাসরি DONORS থেকে আসে যা Firebase থেকে অনুমোদিত দাতা নিয়ে আসে
+  return [];
 }
 
 function getAllDonors() {
@@ -319,24 +326,43 @@ function setupRequestForm() {
     const phone = form.elements.phone.value.trim();
     const requesterName = form.elements.requesterName?.value.trim() || "";
 
-    // Send to backend
-    try {
-      const response = await fetch("http://localhost:5000/api/send-blood-request-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientName, bloodGroup, bags, neededDate, hospital, phone, requesterName })
-      });
+    const requestData = {
+      patientName,
+      bloodGroup,
+      bags,
+      neededDate,
+      hospital,
+      phone,
+      requesterName,
+      requestDate: new Date().toISOString(),
+      status: "pending"
+    };
 
-      if (response.ok) {
-        form.reset();
-        showSuccess($("requestSuccess"), "✔ আবেদন গৃহীত হয়েছে এবং আমাদের টিমকে জানানো হয়েছে। আমাদের স্বেচ্ছাসেবকরা দ্রুত যোগাযোগ করবেন।");
-      } else {
-        showSuccess($("requestSuccess"), "⚠ ইমেইল পাঠাতে সমস্যা হয়েছে, তবে আবেদন নিবন্ধন করা হয়েছে।");
-        form.reset();
+    // Save to Firestore and send email
+    try {
+      // Save to Firebase bloodRequests collection
+      if (window.firebaseDb && window.firebaseAddDoc && window.firebaseCollection) {
+        await window.firebaseAddDoc(
+          window.firebaseCollection(window.firebaseDb, "bloodRequests"),
+          requestData
+        );
       }
+      
+      // Send email notification to admin
+      try {
+        await fetch("http://localhost:5000/api/send-blood-request-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestData)
+        });
+      } catch (error) {
+        console.warn("Email notification failed:", error);
+      }
+
+      form.reset();
+      showSuccess($("requestSuccess"), "✔ আবেদন গৃহীত হয়েছে এবং আমাদের এডমিন টিমকে জানানো হয়েছে। আমাদের স্বেচ্ছাসেবকরা দ্রুত যোগাযোগ করবেন।");
     } catch (error) {
       console.error("Blood request error:", error);
-      // Still show success as form is submitted
       form.reset();
       showSuccess($("requestSuccess"), "✔ আবেদন গৃহীত হয়েছে। আমাদের স্বেচ্ছাসেবকরা দ্রুত যোগাযোগ করবেন।");
     }
@@ -369,31 +395,39 @@ function setupDonorForm() {
       area: form.elements.area.value.trim(),
       phone: form.elements.phone.value.trim(),
       available: true,
-      lastDonation: form.elements.lastDonation.value
+      lastDonation: form.elements.lastDonation.value,
+      registrationDate: new Date().toISOString(),
+      status: "pending"
     };
 
-    const donors = getRegisteredDonors();
-    donors.push({
-      id: Date.now(),
-      ...donorData
-    });
-    localStorage.setItem("prottoy-donors", JSON.stringify(donors));
-
-    // Send email notification to admin
     try {
-      await fetch("http://localhost:5000/api/send-donor-registration-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(donorData)
-      });
-    } catch (error) {
-      console.warn("Email notification failed:", error);
-    }
+      // Save to Firebase pendingDonors collection (requires admin approval)
+      if (window.firebaseDb && window.firebaseAddDoc && window.firebaseCollection) {
+        await window.firebaseAddDoc(
+          window.firebaseCollection(window.firebaseDb, "pendingDonors"),
+          donorData
+        );
+        
+        // Send email notification to admin
+        try {
+          await fetch("http://localhost:5000/api/send-donor-registration-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(donorData)
+          });
+        } catch (error) {
+          console.warn("Email notification failed:", error);
+        }
 
-    form.reset();
-    populateLocationFilters();
-    renderDonors();
-    showSuccess($("donorSuccess"), "✔ নিবন্ধন সম্পন্ন হয়েছে। আপনার নাম রক্তদাতা তালিকায় যুক্ত হয়েছে।");
+        form.reset();
+        showSuccess($("donorSuccess"), "✔ নিবন্ধন সফল! আমাদের প্রশাসক দল যাচাই করার পরে আপনার নাম তালিকায় দেখা যাবে। ধন্যবাদ!");
+      } else {
+        throw new Error("Firebase not initialized");
+      }
+    } catch (error) {
+      console.error("Registration error:", error);
+      showSuccess($("donorSuccess"), "⚠ নিবন্ধনে সমস্যা হয়েছে। পরে আবার চেষ্টা করুন।");
+    }
   });
 }
 
@@ -419,28 +453,42 @@ function setupContactForm() {
     // Get form data
     const name = form.elements.name.value.trim();
     const email = form.elements.email.value.trim();
+    const subject = form.elements.subject.value.trim();
     const message = form.elements.message.value.trim();
+
+    const contactData = {
+      name,
+      email,
+      subject,
+      message,
+      messageDate: new Date().toISOString(),
+      status: "new"
+    };
 
     showSuccess($("contactSuccess"), "বার্তা পাঠানো হচ্ছে...");
 
     try {
-      // Send to backend server (or use your backend URL)
-      const response = await fetch("http://localhost:5000/api/send-contact-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ name, email, message })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        form.reset();
-        showSuccess($("contactSuccess"), "✔ বার্তা সফলভাবে পাঠানো হয়েছে। ধন্যবাদ!");
-      } else {
-        showSuccess($("contactSuccess"), "⚠ " + (result.error || "বার্তা পাঠাতে ব্যর্থ হয়েছে"));
+      // Save to Firebase contactMessages collection
+      if (window.firebaseDb && window.firebaseAddDoc && window.firebaseCollection) {
+        await window.firebaseAddDoc(
+          window.firebaseCollection(window.firebaseDb, "contactMessages"),
+          contactData
+        );
       }
+      
+      // Also send email notification to admin
+      try {
+        await fetch("http://localhost:5000/api/send-contact-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(contactData)
+        });
+      } catch (error) {
+        console.warn("Email notification failed:", error);
+      }
+
+      form.reset();
+      showSuccess($("contactSuccess"), "✔ বার্তা সফলভাবে পাঠানো হয়েছে। ধন্যবাদ!");
     } catch (error) {
       console.error("Contact form error:", error);
       showSuccess($("contactSuccess"), "⚠ বার্তা পাঠাতে ব্যর্থ হয়েছে। পরে আবার চেষ্টা করুন।");
@@ -631,6 +679,20 @@ async function receiptToCanvas() {
   return html2canvas($("receiptPaper"), { scale: 2, backgroundColor: "#ffffff", useCORS: true });
 }
 
+/* রসিদের তথ্য Firebase-এর "receipts" কালেকশনে সেভ হয় — এডমিন প্যানেল থেকে দেখা যায় */
+async function saveReceiptRecord(record) {
+  try {
+    if (window.firebaseDb && window.firebaseAddDoc && window.firebaseCollection) {
+      await window.firebaseAddDoc(
+        window.firebaseCollection(window.firebaseDb, "receipts"),
+        record
+      );
+    }
+  } catch (error) {
+    console.warn("Receipt save to Firebase failed:", error);
+  }
+}
+
 function setupReceiptGenerator() {
   const form = $("receiptForm");
   const statusEl = $("receiptStatus");
@@ -656,6 +718,17 @@ function setupReceiptGenerator() {
     try {
       showSuccess(statusEl, "রসিদ তৈরি হচ্ছে…");
       const receiptNo = await updateReceiptPreview(form);
+
+      // রসিদের রেকর্ড এডমিন প্যানেলের জন্য Firebase-এ সেভ (ব্যর্থ হলেও রসিদ তৈরি চলবে)
+      saveReceiptRecord({
+        receiptNo,
+        donorName: form.elements.donorName.value.trim(),
+        amount: Number(form.elements.amount.value),
+        cause: form.elements.cause.value,
+        signatory: form.elements.signatory.value.trim(),
+        method: action,
+        createdAt: new Date().toISOString()
+      });
 
       if (action === "print") {
         showSuccess(statusEl, "✔ প্রিন্ট ডায়ালগ খোলা হয়েছে।");
@@ -783,7 +856,7 @@ function setupBackToTop() {
 async function initFirebaseAndFetchDonors() {
   try {
     const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js");
-    const { getFirestore, collection, getDocs } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+    const { getFirestore, collection, getDocs, addDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
 
     const firebaseConfig = {
       apiKey: "AIzaSyAb732hZhpSMR877ox2rrud1GHN11FyI1s",
@@ -797,18 +870,42 @@ async function initFirebaseAndFetchDonors() {
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-
-    const querySnapshot = await getDocs(collection(db, "donors"));
-    const fetchedDonors = [];
-    querySnapshot.forEach((doc) => {
-      fetchedDonors.push({ id: doc.id, ...doc.data() });
-    });
     
-    DONORS = fetchedDonors;
-    populateLocationFilters();
-    renderDonors();
+    // Make Firebase globally available for forms
+    window.firebaseDb = db;
+    window.firebaseAddDoc = addDoc;
+    window.firebaseCollection = collection;
+
+    // রক্তদাতা লোড
+    try {
+      const querySnapshot = await getDocs(collection(db, "donors"));
+      const fetchedDonors = [];
+      querySnapshot.forEach((doc) => {
+        fetchedDonors.push({ id: doc.id, ...doc.data() });
+      });
+
+      DONORS = fetchedDonors;
+      populateLocationFilters();
+      renderDonors();
+    } catch (error) {
+      console.error("Error fetching donors from Firestore: ", error);
+    }
+
+    // নোটিশ লোড — এডমিন প্যানেল থেকে ম্যানেজ করা নোটিশগুলো "notices" কালেকশনে থাকে
+    try {
+      const noticeSnapshot = await getDocs(collection(db, "notices"));
+      const fetchedNotices = [];
+      noticeSnapshot.forEach((doc) => {
+        fetchedNotices.push({ id: doc.id, ...doc.data() });
+      });
+
+      NOTICES = fetchedNotices;
+      renderNotices();
+    } catch (error) {
+      console.warn("Notices fetch failed, showing default notices:", error);
+    }
   } catch (error) {
-    console.error("Error fetching donors from Firestore: ", error);
+    console.error("Firebase init error: ", error);
   }
 }
 
